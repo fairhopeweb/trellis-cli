@@ -19,10 +19,16 @@ import (
 var BaseURL = "https://api.github.com"
 var Client = &http.Client{Timeout: time.Second * 5}
 
+type Asset struct {
+	Name string `json:"name"`
+	Url  string `json:"browser_download_url"`
+}
+
 type Release struct {
-	Version string `json:"tag_name"`
-	ZipUrl  string `json:"zipball_url"`
-	URL     string `json:"html_url"`
+	Assets  []Asset `json:"assets"`
+	Version string  `json:"tag_name"`
+	ZipUrl  string  `json:"zipball_url"`
+	URL     string  `json:"html_url"`
 }
 
 func NewReleaseFromVersion(repo string, version string) *Release {
@@ -50,7 +56,7 @@ func DownloadRelease(repo string, version string, path string, dest string) stri
 	os.Chdir(path)
 	archivePath := fmt.Sprintf("%s.zip", release.Version)
 
-	err = DownloadFile(archivePath, release.ZipUrl)
+	err = downloadFile(archivePath, release.ZipUrl)
 	defer os.Remove(archivePath)
 
 	if err != nil {
@@ -80,6 +86,36 @@ func DownloadRelease(repo string, version string, path string, dest string) stri
 	return release.Version
 }
 
+func DownloadAsset(repo string, version string, path string, dest string, pattern string) (asset *Asset, archivePath string) {
+	var err error
+	var release *Release
+
+	if version == "latest" {
+		release, err = FetchLatestRelease(repo, Client)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else if version == "dev" {
+		release = NewReleaseFromVersion(repo, "master")
+	} else {
+		release = NewReleaseFromVersion(repo, version)
+	}
+
+	asset = findAsset(release.Assets, pattern)
+	err = downloadFile(filepath.Join(path, asset.Name), asset.Url)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	archivePath = filepath.Join(path, asset.Name)
+	if err := archiver.Unarchive(archivePath, path); err != nil {
+		log.Fatal(err)
+	}
+
+	return asset, archivePath
+}
+
 func FetchLatestRelease(repo string, client *http.Client) (*Release, error) {
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", BaseURL, repo)
 	resp, err := client.Get(url)
@@ -105,7 +141,17 @@ func FetchLatestRelease(repo string, client *http.Client) (*Release, error) {
 	return release, nil
 }
 
-func DownloadFile(filepath string, url string) error {
+func findAsset(assets []Asset, pattern string) *Asset {
+	for _, asset := range assets {
+		if strings.Contains(strings.ToLower(asset.Url), strings.ToLower(pattern)) {
+			return &asset
+		}
+	}
+
+	return nil
+}
+
+func downloadFile(filepath string, url string) error {
 	out, err := os.Create(filepath)
 	if err != nil {
 		return err
