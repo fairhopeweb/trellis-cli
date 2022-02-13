@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"github.com/roots/trellis-cli/cmd"
 	"github.com/roots/trellis-cli/config"
 	"github.com/roots/trellis-cli/github"
+	"github.com/roots/trellis-cli/http-proxy"
 	"github.com/roots/trellis-cli/plugin"
 	"github.com/roots/trellis-cli/trellis"
 	"github.com/roots/trellis-cli/update"
@@ -22,6 +24,14 @@ var version = "canary"
 var updaterRepo = ""
 
 func main() {
+	var proxyFlag = flag.Bool("proxy", false, "Run reverse HTTP proxy")
+	flag.Parse()
+
+	if *proxyFlag {
+		httpProxy.Run()
+		os.Exit(0)
+	}
+
 	cacheDir, _ := config.Scope.CacheDir()
 
 	updateNotifier := &update.Notifier{
